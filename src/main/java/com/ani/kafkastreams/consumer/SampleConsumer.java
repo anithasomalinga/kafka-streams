@@ -20,6 +20,7 @@ public class SampleConsumer {
 
     @Bean
     KStream<String, String> kStream(StreamsBuilder streamsBuilder) {
+        log.info("Inside Kafka Streams consumer");
         KStream<String, String> stream = streamsBuilder.stream("input", Consumed.with(Serdes.String(), Serdes.String()));
         Duration windowSize = Duration.ofSeconds(10);
         Duration gracePeriod = Duration.ofSeconds(5);
@@ -33,6 +34,7 @@ public class SampleConsumer {
                         Materialized.with(Serdes.String(), CustomSerdes.MessageList()))
                 .toStream()
                 .map((key, value) -> new KeyValue<>(key.key(), value))
+                .peek((key, value) -> log.info("Outgoing record -> key: {}, value: {}", key, value))
                 .to("output", Produced.with(Serdes.String(), CustomSerdes.MessageList()));
         return stream;
     }

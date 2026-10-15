@@ -1,30 +1,43 @@
 services:
-  broker:
-    image: apache/kafka:latest
-    hostname: broker
-    container_name: broker
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: kafka
     ports:
-      - "9092:9092"   # For Spring Boot
-      - "9094:9094"   # For Conduktor
+      - "9092:9092"
+      - "9094:9094"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_PROCESS_ROLES: broker,controller
+      # KRaft Configuration
       KAFKA_NODE_ID: 1
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
-      # 1. Map three security protocols
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LOCAL_APP:PLAINTEXT,CONDUKTOR_APP:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
 
-      # 2. Open ports 9092 (Spring Boot) and 9094 (Conduktor) inside the container
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,LOCAL_APP://0.0.0.0:9092,CONDUKTOR_APP://0.0.0.0:9094
+      # Listeners (9092 for docker network, 9094 for your local host machine)
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Inter-broker and Cluster Setup
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      CLUSTER_ID: '4L62ydZaTsubXw6UnwYmQA' # Pre-generated valid base64 cluster ID
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
 
-      # 3. Tell each app exactly how to route back to Kafka
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,LOCAL_APP://localhost:9092,CONDUKTOR_APP://host.docker.internal:9094
+  kafbat-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    container_name: kafbat-ui
+    ports:
+      - "8085:8080"
+    depends_on:
+      - kafka
+    environment:
+      # Tell Kafbat UI where the broker is inside the docker network
+      KAFKA_CLUSTERS_0_NAME: 'local-kraft-cluster'
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:9092'
+      # Enable the UI settings panel so you can add topics or clusters dynamically
+      DYNAMIC_CONFIG_ENABLED: 'true'
 
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+volumes:
+  kafka_data:
+    driver: local
